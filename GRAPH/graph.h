@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdlib.h>
+#include <cassert>
 
 using namespace std;
 
@@ -232,14 +233,16 @@ public:
     void nuUpdate();                                            //this method updates the nu messages
     void etaUpdate();                                           //this method updates the eta messages
 
-    int  etaNormalize();                                        //this method normalizes the eta's. it returns 0 if at least one node receives conflicting messages, 1 otherwise
-    void nodeMarginals();                                       //this method computes (do not print) node marginals
+    bool etaNormalize();                                        //this method normalizes the eta's. it returns 0 if at least one node receives conflicting messages, 1 otherwise
+    void nodeMarginals(int);                                    //this method computes (do not print) node marginals
+                                                                //input variables:
+                                                                //verbose: set it to 1 to print error messages (if any) when a node receives
+                                                                //conflicting messages from neighbouring factors
 
     void setHardBias(vector<int> & , vector<int> &);            //this method defines hard biases towards color q for each node contained
                                                                 //in the first input vector and according to the color index contained in the second input vector.
                                                                 //default input vectors are empty vectors.
                                                                 //input variables: vector of nodes to be biased, vector of colors to towards which node biases have to be biased
-    
     
     //these are the printing functions
     void etaState();                                            //this method returns the state of the eta's
@@ -285,13 +288,13 @@ public:
     vector < vector <double> > prev_marginal;
     
     
-    int findFrustratedSpins();                                  //this method evaluates, for each node, all the messages from its factors (like nodeMarginals) and seeks if they contain
+    bool findFrustratedSpins();                                 //this method evaluates, for each node, all the messages from its factors (like nodeMarginals) and seeks if they contain
                                                                 //contraddictory information. In this case, this spin is frustrated.
-                                                                //when frustrated spins are found the method returns 1.
+                                                                //when frustrated spins are found the method returns 0.
     
-    int fixSpins(int);                                          //this method fix spins values, by calling setHardBias, for spins that receive a clear indication
-                                                                //towards one color from at least one of its factors.
-                                                                //it is invoked in the method BP_decimation,
+    
+    int fixSpins(int);                                          //this method fix spins values, by calling setHardBias.
+                                                                //it is invoked in the method warningDecimation,
                                                                 //when a node receives a clear message from at least one if its factors.
                                                                 //it also fills the vector fixedSpins and, when doing this, erase nodes from the vector notFixedSpins.
                                                                 //input variable:
@@ -303,10 +306,12 @@ public:
                                                                 //input variable:
                                                                 //verbose: set it to 1 to print the node that get frozen
 
-    int BPsweep(int);                                           //this method updates all the nu's and all the eta's in the graph.
+    bool BPsweep(int);                                           //this method updates all the nu's and all the eta's in the graph.
                                                                 //it returns 0 if at least one node receives conflicting messages, 1 otherwise
                                                                 //input variable:
                                                                 //verbose: set it to 1 to print the messages, 0 otherwise
+    
+    bool warningDecimation(int);
     
     void randomDecimation(int);                                 //this method propagates warnings at each time steps and, at each time step,
                                                                 //it fixes spins by calling fixSpins. when this is not possible it calls fixRandomSpins.
@@ -323,12 +328,13 @@ public:
     
     double compareMarginals();
 
-    void findMostBiased();
+    void findMostBiased(vector<int>&, vector<int>&);
     
-    void BPiteration(int, int);                                 //this method iterates BP equations by calling BP_sweep
+    void BPiteration(double, int, int);                         //this method iterates BP equations by calling BP_sweep until convergence
                                                                 //input variables:
-                                                                //T: time of BP_sweep;
-                                                                //verbose: set it to 1 to print the messages, 0 otherwise
+                                                                //eps     : this value sets the convergence quality. set it to 10^-3.
+                                                                //T       : maximum iteration time. set it to ~ N.
+                                                                //verbose : set it to 1 to print the messages, 0 otherwise
     
     void BPprint();                                             //this method prints the BP messages and the marginals
 

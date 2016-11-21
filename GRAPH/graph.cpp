@@ -728,7 +728,7 @@ void Messages::etaUpdate (){
 
 };
 
-int Messages::etaNormalize(){
+bool Messages::etaNormalize(){
 
     int errorflag=1;
 
@@ -751,7 +751,7 @@ int Messages::etaNormalize(){
     return errorflag;
 };
 
-void Messages::nodeMarginals(){
+void Messages::nodeMarginals(int verbose=0){
     //for each node i
     for(vector<Node>::iterator it_i=G.v.begin(); it_i !=G.v.end(); ++it_i){
         vector <double> marg(q,1.);
@@ -775,8 +775,10 @@ void Messages::nodeMarginals(){
             sum+=marg[k];
         }
         
-        if (!sum)
-            cout << "node " << it_i->n << " receives conflicting messages, see below: " << endl;
+        if (!sum){
+            if(verbose)
+                cout << "node " << it_i->n << " receives conflicting messages, see below: " << endl;
+        }
         else{
             for (int k=0; k<q; k++){
                 marg[k]/=sum;
@@ -900,15 +902,18 @@ void BP::initDecimation(vector<int>& v_bias, vector<int>& v_q){
 
 };
 
-int BP::BPsweep(int verbose){
+bool BP::BPsweep(int verbose){
 
     mess.nuUpdate();
     mess.etaUpdate();
-    int flag = mess.etaNormalize();
-    if(verbose){
-        mess.nodeMarginals();
+
+    bool flag = mess.etaNormalize();
+    
+    mess.nodeMarginals(verbose);
+
+    if(verbose)
         BPprint();
-    }
+    
     return flag;
 };
 
@@ -920,15 +925,24 @@ void BP::BPprint(){
 
 };
 
-void BP::BPiteration(int T, int verbose=0){
+void BP::BPiteration(double eps, int T, int verbose=0){
     
-    for (int t=0; t<T; t++)
-        int flag = BPsweep(verbose);
+    double tmp_eps=1;
+    int t=0;
+    
+    while (tmp_eps > eps && t<T){
+        BPsweep(verbose);
+        tmp_eps = compareMarginals();
+        storePreviousMarginals();
+        if(verbose)
+            cout << "BP iteration: at time t=" << t << " the maximum error between current and previous marginals is " << tmp_eps << endl;
+        t++;
+    }
     
 }
 
-void BP::randomDecimation(int verbose=0){
-
+bool BP::warningDecimation(int verbose=0){
+    
     //Pictorially this is how this method works:
     
     //time t-1:
@@ -947,39 +961,62 @@ void BP::randomDecimation(int verbose=0){
     //g is the number of spins that became frozen (decimated) at each iteration.
     //g_past is the number of spins that became frozen (decimated) at the previous iteration.
     //we do keep track of both for the reason explained above.
-    //f is a boolean variable that is set to 1 when frustrated variables are found
+    //f is a boolean variable that is set to 0 when frustrated variables are found
     
-    int  g, g_past=1;
+    int  g=1, g_past=1;
     int  t=0;
-    bool f=0;
+    bool f1=1;
+    bool f2=1;
     
-    while (f==0 && fixedSpins.size()<N){
-        cout << "--------------------------------------time: " << t << "------------------------------------ " << endl;
-        cout << endl;
-        if (verbose){
+    while (f1==1 && (g+g_past>0)){
+    
+        f1 = BPsweep(verbose);
+        
+        f2 = findFrustratedSpins();
+        
+        //f1 and f2 have to be equal
+        assert(f1==f2);
+
+        g_past = g;
+        g=fixSpins(verbose);
+
+        t++;
+    
+    }
+    
+    return f1;
+    
+}
+
+void BP::randomDecimation(int verbose=0){
+    
+    int  t=0;
+    bool f=1;
+    
+    while (f==1 && fixedSpins.size()<N){
+        
+        if(verbose){
+            cout << "--------------------------------------time: " << t << "------------------------------------ " << endl;
+            cout << endl;
             cout << "frozen variables:" << " (size=" << fixedSpins.size()    << ")" << endl;
             vec_print(fixedSpins);
             cout << "free variables:"   << " (size=" << notFixedSpins.size() << ")" << endl;
             vec_print(notFixedSpins);
+        
+            cout << "---------------------------------------------------------------------------------------------------------call warningDecimation" << endl;
         }
         
-        int flag = BPsweep(verbose);
-
-        if(!flag)
-            break;
-
-        f=findFrustratedSpins();
-        g=fixSpins(verbose);
+        f = warningDecimation(verbose);
         
+        if(verbose)
+            cout << "---------------------------------------------------------------------------------------------------------warning propagated; f=" << f << endl;
         
         //if no contraddiction are found and no spins gets fixed, we randomly pick one spin and we fix it
-        if (f == 0 && (g+g_past==0)){
+        if (f == 1){
             fixRandomSpin(verbose);
         }
         
-        
         t++;
-        g_past = g;
     }
     
     if (verbose){
@@ -995,21 +1032,62 @@ void BP::randomDecimation(int verbose=0){
 
 };
 
-void BP::BPguidedDecimation(int T, int verbose=0.){
+void BP::BPguidedDecimation(int TT, int verbose=0){
     
     reservePreviousMarginals();
     
-    double eps=1.;
+    double eps = 0.001;
+    int T = 100;
+    double f;
     
     BPsweep(verbose);
     storePreviousMarginals();
     
-    while (eps>pow(10.,-3)){
-        BPsweep(verbose);
-        storePreviousMarginals();
-        eps = compareMarginals();
+    for(int t=0; t<TT; t++){
+    
+        BPiteration(eps,T,verbose);
+        
+        vector<int> v_bias;
+        vector<int> v_q;
+    
+        findMostBiased(v_bias, v_q);
+        
+        cout << "most biased node: " << v_bias[0] << endl;
+        cout << "size of v_q " << v_q.size() << endl;
+        
+        if(v_bias.size() != 0)
+            mess.setHardBias(v_bias,v_q);
+    
+        if (verbose){
+            cout << "*************** printing the nodes that gets frozen at this time step: " << endl;
+            for(int i=0; i<v_bias.size(); i++)
+                cout << v_bias[i] << " " << v_q[i] << endl;
+        }
+        
+        fixedSpins.push_back(v_bias[0]);
+        fixedValues.push_back(v_q[0]);
+        notFixedSpins.erase(remove(notFixedSpins.begin(), notFixedSpins.end(), v_bias[0]), notFixedSpins.end());
+        
+        if(verbose)
+            cout << "---------------------------------------------------------------------------------------------------------call warningDecimation" << endl;
+    
+        f = warningDecimation(verbose);
+        
+        if(verbose)
+            cout << "---------------------------------------------------------------------------------------------------------warning propagated; f=" << f << endl;
+    
     }
     
+    if (verbose){
+        cout << endl;
+        cout << "----------------------------------END OF ITERATION----------------------------------------" << endl;
+        cout << "(maybe partial) solution: " << endl;
+        cout << "size of the solution: "     << fixedSpins.size() << endl;
+        vec_print(fixedSpins);
+        vec_print(fixedValues);
+    }
+
+
 };
 
 void BP::reservePreviousMarginals(){
@@ -1045,26 +1123,30 @@ double BP::compareMarginals(){
     
 };
     
-void BP::findMostBiased(){
+void BP::findMostBiased(vector<int> & v_bias, vector<int>& v_q){
     
     int i_max=0;
     double tmp, max=0.;
+    int col=0;
     
     for (int i=0; i<N; i++){
-        tmp = abs(mess.marginal[i][0]-mess.marginal[i][1]);
-        if (tmp > max){
+        tmp = mess.marginal[i][0]-mess.marginal[i][1];
+        if (abs(tmp) > max){
             i_max=i;
-            max=tmp;
+            
+            if (tmp > 0) col=0;
+            else col=1;
+            
+            max=abs(tmp);
         }
+        
     }
     
-    return;
+    v_bias.push_back(i_max);
+    v_q.push_back(col);
+    
 };
 
-
-
-
-    
 void BP::fixRandomSpin(int verbose){
     
     vector<int> v_bias;
@@ -1098,11 +1180,11 @@ void BP::fixRandomSpin(int verbose){
 };
 
 
-int BP::findFrustratedSpins(){
+bool BP::findFrustratedSpins(){
     
     vector<int>().swap(frustratedSpins);
     
-    bool f=0;
+    bool f=1;
     
     //for each node i
     for(vector<Node>::iterator it_i=G.v.begin(); it_i !=G.v.end(); ++it_i){
@@ -1129,7 +1211,7 @@ int BP::findFrustratedSpins(){
         
         if (!sum){
             frustratedSpins.push_back(it_i->n);
-            f=1;
+            f=0;
         }
     }
     
@@ -1139,8 +1221,8 @@ int BP::findFrustratedSpins(){
 
 int BP::fixSpins(int verbose){
 
-    int q=1;
-
+    //this is function needs to be generalized to deal with a general q
+    
     //v_bias contains the indices of nodes that have to be biased
     //v_q contains the color towards which they have to be biased
 
@@ -1152,7 +1234,7 @@ int BP::fixSpins(int verbose){
     for (vector<Factor*>::iterator it_a = G.F.begin() ; it_a != G.F.end(); ++it_a){
         //we look at all the nodes to which a is sending messages
         for (vector<int>::iterator it_i = G.F[(*it_a)->f]->v_node.begin() ; it_i != G.F[(*it_a)->f]->v_node.end(); ++it_i){
-            //if this not is not fustrated (i.e. it is not receinving conflicting messages from factors), we fix it
+            //if this not is not fustrated (i.e. it is not receiving conflicting messages from factors), we fix it
             bool flag = find(frustratedSpins.begin(), frustratedSpins.end(), *it_i) != frustratedSpins.end();
             if(!flag){
                 
@@ -1160,7 +1242,7 @@ int BP::fixSpins(int verbose){
                 //if this message contains a clear indication of the color towards which
                 //the node should be biased, we add the node to v_bias and the color to v_q,
                 //after having checked that the node has not been frozen yet.
-                if (mess.nu_FacToNode[(*it_a)->f][index_i][q]==1.){
+                if (mess.nu_FacToNode[(*it_a)->f][index_i][0]==0.){
                     bool contains = find(fixedSpins.begin(), fixedSpins.end(), *it_i) != fixedSpins.end();
                     if(!contains){
                         v_bias.push_back(*it_i);
@@ -1172,7 +1254,7 @@ int BP::fixSpins(int verbose){
                     }
                     continue;
                 }
-                if (mess.nu_FacToNode[(*it_a)->f][index_i][q]==0.){
+                if (mess.nu_FacToNode[(*it_a)->f][index_i][1]==0.){
                     bool contains = find(fixedSpins.begin(), fixedSpins.end(), *it_i) != fixedSpins.end();
                     if(!contains){
                         v_bias.push_back(*it_i);
