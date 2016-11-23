@@ -925,19 +925,34 @@ void BP::BPprint(){
 
 };
 
-void BP::BPiteration(double eps, int T, int verbose=0){
+bool BP::BPiteration(double eps, int T, int verbose=0){
     
-    double tmp_eps=1;
-    int t=0;
+    int    t = 0;
+    int    f = 1;
+    double tmp_eps = 1;
     
-    while (tmp_eps > eps && t<T){
+    
+    while (tmp_eps > eps && t < T){
         BPsweep(verbose);
+        
+        if (t == 2) {
+            f = findFrustratedSpins();
+            if (f == 0){
+                cout << "****************** ERROR: ************************************* the variable set by the last calling of warningPropagation causes contraddictions" << endl;
+                f = 0;
+                break;
+            }
+        }
+        
         tmp_eps = compareMarginals();
         storePreviousMarginals();
         if(verbose)
+            cout << endl;
             cout << "BP iteration: at time t=" << t << " the maximum error between current and previous marginals is " << tmp_eps << endl;
         t++;
     }
+    
+    return f;
     
 }
 
@@ -977,6 +992,13 @@ bool BP::warningDecimation(int verbose=0){
         //f1 and f2 have to be equal
         assert(f1==f2);
 
+        if (f1 == 0){
+            cout << "****************** ERROR: ************************************* frustrated variables are found in warningPropagation" << endl;
+            return f1;
+            break;
+        }
+
+        
         g_past = g;
         g=fixSpins(verbose);
 
@@ -990,10 +1012,10 @@ bool BP::warningDecimation(int verbose=0){
 
 void BP::randomDecimation(int verbose=0){
     
-    int  t=0;
-    bool f=1;
+    int  t = 0;
+    bool f = 1;
     
-    while (f==1 && fixedSpins.size()<N){
+    while (f == 1 && fixedSpins.size() < N){
         
         if(verbose){
             cout << "--------------------------------------time: " << t << "------------------------------------ " << endl;
@@ -1034,34 +1056,45 @@ void BP::randomDecimation(int verbose=0){
 
 void BP::BPguidedDecimation(int TT, int verbose=0){
     
-    reservePreviousMarginals();
+    initPreviousMarginals();
     
     double eps = 0.001;
-    int T = 100;
     double f;
+    int    T = 100;
+    int    t=0;
     
-    BPsweep(verbose);
-    storePreviousMarginals();
+    while (t < TT && notFixedSpins.size()>0){
+
     
-    for(int t=0; t<TT; t++){
-    
-        BPiteration(eps,T,verbose);
+        if(verbose){
+            cout << "--------------------------------------time: " << t << "------------------------------------ " << endl;
+            cout << endl;
+            cout << "frozen variables:" << " (size=" << fixedSpins.size()    << ")" << endl;
+            vec_print(fixedSpins);
+            cout << "free variables:"   << " (size=" << notFixedSpins.size() << ")" << endl;
+            vec_print(notFixedSpins);
+            cout << endl;
+            cout << "run BP until convergence: " << endl;
+        }
+        
+        
+        f = BPiteration(eps, T, verbose);
+        
+        if (f == 0)
+            break;
         
         vector<int> v_bias;
         vector<int> v_q;
     
         findMostBiased(v_bias, v_q);
         
-        cout << "most biased node: " << v_bias[0] << endl;
-        cout << "size of v_q " << v_q.size() << endl;
-        
         if(v_bias.size() != 0)
             mess.setHardBias(v_bias,v_q);
     
         if (verbose){
+            cout << endl;
             cout << "*************** printing the nodes that gets frozen at this time step: " << endl;
-            for(int i=0; i<v_bias.size(); i++)
-                cout << v_bias[i] << " " << v_q[i] << endl;
+            cout << "*************** we freeze the most biased node: " << v_bias[0] << " towards the color " << v_q[0] <<  endl;
         }
         
         fixedSpins.push_back(v_bias[0]);
@@ -1069,13 +1102,24 @@ void BP::BPguidedDecimation(int TT, int verbose=0){
         notFixedSpins.erase(remove(notFixedSpins.begin(), notFixedSpins.end(), v_bias[0]), notFixedSpins.end());
         
         if(verbose)
-            cout << "---------------------------------------------------------------------------------------------------------call warningDecimation" << endl;
+            cout << "--------------------------------------------------------------------------------------------------------------------------- call warningDecimation" << endl;
     
         f = warningDecimation(verbose);
         
-        if(verbose)
-            cout << "---------------------------------------------------------------------------------------------------------warning propagated; f=" << f << endl;
-    
+        if(verbose){
+            cout << "--------------------------------------------------------------------------------------------------------------------------- warning propagated" << endl;
+            if(f)
+                cout << "--------------------------------------------------------------------------------------------------------------------------- no contraddictions found" << endl;
+            else
+                cout << "--------------------------------------------------------------------------------------------------------------------------- contraddictions found" << endl;
+            cout << endl;
+        }
+        
+        if (f == 0){
+            break;
+        }
+        t++;
+        
     }
     
     if (verbose){
@@ -1090,19 +1134,22 @@ void BP::BPguidedDecimation(int TT, int verbose=0){
 
 };
 
-void BP::reservePreviousMarginals(){
+void BP::initPreviousMarginals(){
     
     prev_marginal.resize(N);
     
-    for(int i=0; i<N; i++)
+    for(int i = 0; i < N; i++){
         prev_marginal[i].resize(q-1);
+        for (int k = 0; k < q-1; k++)
+            prev_marginal[i][k] = 0.;
+    }
     
 };
 
 void BP::storePreviousMarginals(){
     
-    for(int i=0; i<N; i++){
-        for (int k=0; k<q-1; k++)
+    for(int i = 0; i < N; i++){
+        for (int k = 0; k < q-1; k++)
             prev_marginal[i][k] = mess.marginal[i][k];
     }
     
@@ -1112,8 +1159,8 @@ double BP::compareMarginals(){
     
     double tmp, max = 0.;
     
-    for(int i=0; i<N; i++){
-        for (int k=0; k<q-1; k++)
+    for(int i = 0; i < N; i++){
+        for (int k = 0; k < q-1; k++)
             tmp = abs(prev_marginal[i][k] - mess.marginal[i][k]);
             if (tmp > max)
                 max = tmp;
@@ -1125,19 +1172,19 @@ double BP::compareMarginals(){
     
 void BP::findMostBiased(vector<int> & v_bias, vector<int>& v_q){
     
-    int i_max=0;
-    double tmp, max=0.;
-    int col=0;
+    int    i_max = notFixedSpins[0];
+    int    col = 0;
+    double tmp, max = 0.;
     
-    for (int i=0; i<N; i++){
-        tmp = mess.marginal[i][0]-mess.marginal[i][1];
+    for (vector<int>::iterator it_i = notFixedSpins.begin(); it_i != notFixedSpins.end(); ++it_i){
+        tmp = mess.marginal[*it_i][0]-mess.marginal[*it_i][1];
         if (abs(tmp) > max){
-            i_max=i;
+            i_max = *it_i;
             
-            if (tmp > 0) col=0;
-            else col=1;
+            if (tmp > 0) col = 0;
+            else col = 1;
             
-            max=abs(tmp);
+            max = abs(tmp);
         }
         
     }
@@ -1173,7 +1220,7 @@ void BP::fixRandomSpin(int verbose){
     
     if (verbose){
         cout << "*************** printing the nodes that gets randomly frozen: " << endl;
-        for(int i=0; i<v_bias.size(); i++)
+        for(int i = 0; i < v_bias.size(); i++)
             cout << v_bias[i] << " " << v_q[i] << endl;
     }
     

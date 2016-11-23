@@ -306,12 +306,14 @@ public:
                                                                 //input variable:
                                                                 //verbose: set it to 1 to print the node that get frozen
 
-    bool BPsweep(int);                                           //this method updates all the nu's and all the eta's in the graph.
+    bool BPsweep(int);                                          //this method updates all the nu's and all the eta's in the graph.
                                                                 //it returns 0 if at least one node receives conflicting messages, 1 otherwise
                                                                 //input variable:
                                                                 //verbose: set it to 1 to print the messages, 0 otherwise
     
-    bool warningDecimation(int);
+    bool warningDecimation(int);                                //this method runs BPsweep twice to see if the spin that we decimate are able to fix other spins
+                                                                //in the graph.
+                                                                //it returns 0 if at least one node receives conflicting messages, 1 otherwise
     
     void randomDecimation(int);                                 //this method propagates warnings at each time steps and, at each time step,
                                                                 //it fixes spins by calling fixSpins. when this is not possible it calls fixRandomSpins.
@@ -322,7 +324,7 @@ public:
 
     void BPguidedDecimation(int, int);
 
-    void reservePreviousMarginals();
+    void initPreviousMarginals();
 
     void storePreviousMarginals();
     
@@ -330,11 +332,14 @@ public:
 
     void findMostBiased(vector<int>&, vector<int>&);
     
-    void BPiteration(double, int, int);                         //this method iterates BP equations by calling BP_sweep until convergence
+    bool BPiteration(double, int, int);                         //this method iterates BP equations by calling BP_sweep until convergence
                                                                 //input variables:
                                                                 //eps     : this value sets the convergence quality. set it to 10^-3.
                                                                 //T       : maximum iteration time. set it to ~ N.
                                                                 //verbose : set it to 1 to print the messages, 0 otherwise
+                                                                //output  : it returns 0 if conflicting messages are found, 1 otherwise
+
+    
     
     void BPprint();                                             //this method prints the BP messages and the marginals
 

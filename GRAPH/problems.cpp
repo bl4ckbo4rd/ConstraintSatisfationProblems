@@ -158,7 +158,12 @@ void f_BPguidedDecimation(SatInstance& G, int N, int M, int p, int q){
     G.graphStructure();
     
     BP It(q,G);
-    It.BPguidedDecimation(10,1);
+    vector <int> v_q;
+    vector <int> v_bias;
+    
+    It.initDecimation(v_bias,v_q);
+    int verbose=1;
+    It.BPguidedDecimation(N,verbose);
     
 }
 
