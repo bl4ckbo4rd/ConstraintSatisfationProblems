@@ -1,14 +1,16 @@
 #include "graph.h"
 
-void f_XorsatInstance(XorsatInstance &, int, int, int, int);
-void f_plantedXorsatIntance(XorsatInstance &, int, int, int, int);
+void f_XorsatGraph(XorsatInstance &, int, int, int, int);
+void f_plantedXorsatGraph(XorsatInstance &, int, int, int, int);
 void f_leafRemoval(XorsatInstance &, int, int, int, int);
 void f_XorsatRandomDecimation(XorsatInstance &, int, int, int, int);
 
 
-void f_SatInstance(SatInstance &, int, int, int, int);
-void f_plantedSatInstance(SatInstance &, int, int, int, int);
+void f_SatGraph(SatInstance &, int, int, int, int);
+void f_plantedSatGraph(SatInstance &, int, int, int, int);
+void f_BPsweepSat(SatInstance&, int, int, int, int);
 void f_BPguidedDecimation(SatInstance &, int, int, int, int);
+
 
 
 

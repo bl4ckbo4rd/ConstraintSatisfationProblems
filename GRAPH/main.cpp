@@ -25,13 +25,16 @@ int main (int argc, char *argv[]){
     
     srand(seed);
     
-    //SatInstance G(N,p);
-    //f_plantedSatInstance(G,N,M,p,q);
-
     //XorsatInstance G(N,p);
-    //f_XorsatRandomDecimation(G, N, M, p, q);
+    //f_XorsatGraph(G,N,M,p,q);
+    //f_plantedXorsatGraph(G,N,M,p,q);
+    //f_leafRemoval(G,N,M,p,q);
+    //f_XorsatRandomDecimation(G,N,M,p,q);
     
     SatInstance G(N,p);
+    //f_SatGraph(G,N,M,p,q);
+    //f_plantedSatGraph(G,N,M,p,q);
+    //f_BPsweepSat(G,N,M,p,q);
     f_BPguidedDecimation(G,N,M,p,q);
     
     return 1;

@@ -2,10 +2,11 @@
 
 
 
-
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------// methods of class Node
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
 
 int Node::numberOfFactors(){
   return v_fac.size();
@@ -13,10 +14,11 @@ int Node::numberOfFactors(){
 
 
 
-
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------// methods of class Factor
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
 
 //input variables:
 //p_f : index of the factor
@@ -26,16 +28,22 @@ Factor::Factor(int p_f, int p_p) : f ( p_f ), p(p_p) {
     v_node.reserve(p);
 };
 
+
 int Factor::numberOfNodes(){
     return v_node.size();
 };
 
+
+
 //--------------------------------------------------------------------------------------------------------------------------------------------// methods of the derived class FactorXorsat
+
+
 
 //input variables:
 //i,j,k : indeces of the nodes entering in the factor
+//in the XORSAT problem z is a useles variable
 
-double FactorXorsat::clause(int i, int j, int k){
+double FactorXorsat::clause(int i, int j, int k, int z=0){
     
     /*
     //this is the finite T clause
@@ -55,6 +63,8 @@ double FactorXorsat::clause(int i, int j, int k){
     
 };
 
+
+
 //input variables:
 //i,j,k : indeces of the nodes entering in the factor
 
@@ -70,31 +80,51 @@ void FactorXorsat::plantedClause(int i, int j, int k){
     
 };
 
+
+
 //-----------------------------------------------------------------------------------------------------------------------------------------------// methods of the derived class FactorSat
+
+
 
 //input variables:
 //i,j,k : indeces of the nodes entering in the factor
+//z is useful when updating nu's.
 
-double FactorSat::clause(int i, int j, int k){
+//in order to understand the role of z, take a factor b connected to nodes x1, x2 and x3.
+//when computing the message nu from b to x1, we have that i=x1, j=x2 and k=x3
+//so we properly set J1=v_J[0], J2=v_J[1] and J3=v_J[2].
+//by the way, when computing the message nu from b to x2, we have i=x2, j=x3 and k=x1
+//so we need to set J1=v_J[1], J2=v_J[2] and J3=v_J[0].
+//and finally, when computing the message nu from b to x3, we have i=x3, j=x1 and k=x2
+//so we need to set J1=v_J[2], J2=v_J[0] and J3=v_J[1].
+//in the case of K=3, z=0,1,2 cover these three cases.
 
-    bool J1 = v_J[0];
-    bool J2 = v_J[1];
-    bool J3 = v_J[2];
+//the reason why we need it in the SAT problem but not in the XORSAT problem is that FactorSat
+//is specified by local variables, J's, one for each variable entering in the factor
+//while in XORSAT, FactorXorsat is specified by a single variable, type.
+
+double FactorSat::clause(int i, int j, int k, int z){
+
+    bool J1 = v_J[ (z + 0) % p ];
+    bool J2 = v_J[ (z + 1) % p ];
+    bool J3 = v_J[ (z + 2) % p ];
     
     //this is the T=0 clause
-    return (2*J1 - 1) * (i - (1-J1)) | (2*J2 - 1) * (j - (1-J2)) | (2*J3 - 1) * (k - (1-J3));
+    return ((2*J1 - 1) * (J1 - i)) | ((2*J2 - 1) * (J2 - j)) | ((2*J3 - 1) * (J3 - k));
 
 };
+
+
 
 //input variables:
 //i,j,k : indeces of the nodes entering in the factor
 
 //given a triplet of variables entering in a clause, we can construct several planted "clauses".
-//a clause of the SAT problem is specified by three values J1, J2, J3, being 0 or 1 if the corresponding variables appear negated or unnegated in the clause,
+//a clause of the SAT problem is specified by three values J1, J2, J3, being 0 or 1 if the corresponding variables appear unnegated or negated in the clause,
 //drawn at random in the non-planted setting.
-//for instance, consider the clause x1 | !x2 | !x3 where ! indicates the negation. in this case we set J1=1, J2=0, J3=0.
+//for instance, consider the clause x1 | !x2 | !x3 where ! indicates the negation. in this case we set J1=0, J2=1, J3=1.
 //it is easy to see that the only choice of J's for which the triplet do not satisfy the clause is 0, 1, 1, and more generally, for a particular realization of (x1,x2,x3) we need
-//to exclude J1=!x1, J2=!x2, J3=!x3.
+//to exclude J1=x1, J2=x2, J3=x3.
 
 void FactorSat::plantedClause(int i, int j, int k){
     
@@ -119,7 +149,7 @@ void FactorSat::plantedClause(int i, int j, int k){
         else
             J3=0;
 
-        p_J = make_vector<bool>() << 1-i << 1-j << 1-k;
+        p_J = make_vector<bool>() << i << j << k;
         temp_v_J = make_vector<bool>() << J1  << J2  << J3;
     
         if (p_J != temp_v_J)
@@ -133,43 +163,51 @@ void FactorSat::plantedClause(int i, int j, int k){
 
 
 
-
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------// methods of class Graph
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
+
+
 
 //input variables:
 //p_N : # of nodes
 //p_p : # of variables entering in a factor
 
 Graph::Graph(int p_N, int p_p) : N ( p_N ), p ( p_p ) {
-  v.reserve(N);
-  for (int i = 0; i < N; ++i){
-    v.push_back (Node(i));
-  }
+    v.reserve(N);
+    for (int i = 0; i < N; ++i)
+        v.push_back (Node(i));
 };
+
 
 int Graph::numberOfTotalFactors(){
-  return F.size();
+    return F.size();
 };
+
 
 int Graph::numberOfTotalNodes(){
-  return N;
+    return N;
 };
+
 
 void Graph::factorsOfNode(int i){
-  cout << "node " << i << " has " << v[i].numberOfFactors() << " factors: " << endl;
-  for (vector<int>::iterator it = v[i].v_fac.begin() ; it != v[i].v_fac.end(); ++it)
-    cout << *it << endl;
+    cout << "node " << i << " has " << v[i].numberOfFactors() << " factors: " << endl;
+    for (vector<int>::iterator it = v[i].v_fac.begin() ; it != v[i].v_fac.end(); ++it)
+        cout << *it << endl;
 };
+
 
 void Graph::nodesOfFactor(int a){
-  cout << "factor " << a << " has " << F[a]->numberOfNodes() << " nodes: " << endl;
-  for (vector<int>::iterator it = F[a]->v_node.begin() ; it != F[a]->v_node.end(); ++it)
-    cout << *it << endl;
+    cout << "factor " << a << " has " << F[a]->numberOfNodes() << " nodes: " << endl;
+    for (vector<int>::iterator it = F[a]->v_node.begin() ; it != F[a]->v_node.end(); ++it)
+        cout << *it << endl;
 };
 
+
+
 //------------------------------------------------------------------------------------------------------------------------------------------// methods of the derived class XorsatInstance
+
+
 
 //input variables:
 //p_a    : factor index;
@@ -216,6 +254,8 @@ int XorsatInstance::addFactor(int p_a, bool p_type, vector<int> v_da){
     
 };
 
+
+
 void XorsatInstance::graphStructure(){
     
     cout << endl;
@@ -243,6 +283,8 @@ void XorsatInstance::graphStructure(){
     cout << endl;
     
 };
+
+
 
 //input variables:
 //p_M: # of factors
@@ -275,6 +317,8 @@ void XorsatInstance::ErdosRenyi(int p_M){
     }
 
 };
+
+
 
 //input variables:
 //p_M: # of factors
@@ -314,7 +358,10 @@ void XorsatInstance::plantedErdosRenyi(int p_M, vector<int> &ps){
             }
         }
     }
+    
 };
+
+
 
 //input variables:
 //ps : the planted configuration
@@ -335,10 +382,12 @@ bool XorsatInstance::check(vector<int> &ps){
     return prod;
 }
 
+
+
 //input variable:
 //verbose : 1/0 for the verbose/non verbose version of the method
 
-void XorsatInstance::LeafRemoval(int verbose){
+void XorsatInstance::LeafRemoval(bool verbose){
     
     int count=1, flag, errorflag;
     int l;
@@ -405,7 +454,11 @@ void XorsatInstance::LeafRemoval(int verbose){
     
 };
 
+
+
 //--------------------------------------------------------------------------------------------------------------------------------------------// methods of the derived class SatInstance
+
+
 
 //input variables:
 //p_a    : factor index;
@@ -452,6 +505,8 @@ int SatInstance::addFactor(int p_a, vector<bool> p_v_J, vector<int> v_da){
     
 };
 
+
+
 void SatInstance::graphStructure(){
     
     cout << endl;
@@ -479,6 +534,8 @@ void SatInstance::graphStructure(){
     cout << endl;
     
 };
+
+
 
 //input variables:
 //p_M: # of factors
@@ -526,6 +583,8 @@ void SatInstance::ErdosRenyi(int p_M){
     
 };
 
+
+
 //input variables:
 //p_M : # of factors
 //ps  : planted configuration
@@ -564,12 +623,14 @@ void SatInstance::plantedErdosRenyi(int p_M, vector<int> &ps){
                 //J1 = ((FactorSat*)F[ptr->f])->v_J[0];
                 //J2 = ((FactorSat*)F[ptr->f])->v_J[1];
                 //J3 = ((FactorSat*)F[ptr->f])->v_J[2];
-                //cout << ps[i] << " " << ps[j] << " " << ps[k]  << " " << ((2*J1 - 1) * (ps[i] - (1-J1)) | (2*J2 - 1) * (ps[j] - (1-J2)) | (2*J3 - 1) * (ps[k] - (1-J3))) << endl;
+                //cout << ps[i] << " " << ps[j] << " " << ps[k]  << " " << ((2*J1 - 1) * (J1 - ps[i]) | (2*J2 - 1) * (J2 - ps[j]) | (2*J3 - 1) * (J3 - ps[k])) << endl;
                
             }
         }
     }
 };
+
+
 
 //input variables:
 //ps  : planted configuration
@@ -580,6 +641,7 @@ bool SatInstance::check(vector<int> &ps){
     int i, j, k;
     bool J1, J2, J3;
     for (int a=0; a<M; a++){
+        
         i = F[a]->v_node[0];
         j = F[a]->v_node[1];
         k = F[a]->v_node[2];
@@ -588,13 +650,14 @@ bool SatInstance::check(vector<int> &ps){
         J2 = ((FactorSat*)F[a])->v_J[1];
         J3 = ((FactorSat*)F[a])->v_J[2];
         
-        prod*=((2*J1 - 1) * (ps[i] - (1-J1)) | (2*J2 - 1) * (ps[j] - (1-J2)) | (2*J3 - 1) * (ps[k] - (1-J3)));
+        
+        prod*=((2*J1 - 1) * ( J1 - ps[i] )) | ((2*J2 - 1) * ( J2 - ps[j] )) | ((2*J3 - 1) * ( J3 - ps[k] ));
         
     }
     
     return prod;
-}
-
+               
+};
 
 
 
@@ -603,19 +666,21 @@ bool SatInstance::check(vector<int> &ps){
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 
 
+
 Messages::Messages(int p_q, Graph& p_G) : q (p_q), G (p_G) {
     
     N=G.numberOfTotalNodes();
     M=G.numberOfTotalFactors();
-
+    
     eta_NodeToFac.resize(N);
     nu_FacToNode.resize(M);
     marginal.resize(N);
     bias.resize(N);
-    
+
     initMessages();
-    
+
 };
+
 
 
 void Messages::initMessages(){
@@ -632,7 +697,6 @@ void Messages::initMessages(){
             eta_NodeToFac[it_i->n][index_a].resize(q);
             eta_NodeToFac[it_i->n][index_a]=eta;
 
-        
         }
     }
 
@@ -665,9 +729,14 @@ void Messages::initMessages(){
 
 };
 
+
+
 void Messages::nuUpdate (){
 
     for (vector<Factor*>::iterator it_b = G.F.begin() ; it_b != G.F.end(); ++it_b){
+
+        int z=0;
+
         for (vector<int>::iterator it_i = G.F[(*it_b)->f]->v_node.begin() ; it_i != G.F[(*it_b)->f]->v_node.end(); ++it_i){
             //cout << "message from factor " << it_b->f << " to node " << *it_i << endl;
             //compute message nu_b_to_i
@@ -683,15 +752,21 @@ void Messages::nuUpdate (){
             }
             
             vector <double> nu(q,0.);
+            
             //this part needs to be generalized to general kind of clauses.
             //now it is tailed to describe a 3-body interaction.
+            
             for (int k0=0; k0<q; ++k0){
                 for (int k1=0; k1<q; ++k1){
                     for (int k2=0; k2<q; ++k2){
-                        nu[k0] += G.F[(*it_b)->f]->clause(k0,k1,k2) * in_eta[0][k1] * in_eta[1][k2];
+                        
+                        nu[k0] += G.F[(*it_b)->f]->clause(k0,k1,k2,z) * in_eta[0][k1] * in_eta[1][k2];
+                        
                     }
                 }
             }
+            
+            z++;
             
             //message nu_b_to_i
             nu_FacToNode[(*it_b)->f][index_i] = nu;
@@ -699,6 +774,42 @@ void Messages::nuUpdate (){
     }
 
 };
+
+
+
+bool Messages::nuNormalize(){
+    
+    double sum;
+    
+    int f = 1;
+    
+    for (vector<Factor*>::iterator it_b = G.F.begin() ; it_b != G.F.end(); ++it_b){
+        for (vector<int>::iterator it_i = G.F[(*it_b)->f]->v_node.begin() ; it_i != G.F[(*it_b)->f]->v_node.end(); ++it_i){
+            //cout << "message from factor " << it_b->f << " to node " << *it_i << endl;
+            //compute message nu_b_to_i
+            int index_i = distance (G.F[(*it_b)->f]->v_node.begin(), it_i);
+
+            sum = 0.;
+            for (int k0=0; k0<q; ++k0){
+                sum += nu_FacToNode[(*it_b)->f][index_i][k0];
+            }
+            
+            if (sum !=0 ){
+                for (int k0=0; k0<q; ++k0){
+                    nu_FacToNode[(*it_b)->f][index_i][k0]/=sum;
+                }
+            }
+            else
+                f=0;
+            
+        }
+    }
+    
+    return f;
+    
+};
+
+
 
 void Messages::etaUpdate (){
 
@@ -728,30 +839,38 @@ void Messages::etaUpdate (){
 
 };
 
+
+
 bool Messages::etaNormalize(){
 
-    int errorflag=1;
+    int errorflag = 1;
 
     for(vector<Node>::iterator it_i=G.v.begin(); it_i !=G.v.end(); ++it_i){
         for (vector<int>::iterator it_a = G.v[it_i->n].v_fac.begin(); it_a != G.v[it_i->n].v_fac.end(); ++it_a){
             int index_a = distance (G.v[it_i->n].v_fac.begin(), it_a);
-            double sum=0.;
-            for (int k=0; k<q; k++){
-                sum+=eta_NodeToFac[it_i->n][index_a][k];
+            double sum = 0.;
+            for (int k = 0; k < q; k++){
+                sum += eta_NodeToFac[it_i->n][index_a][k];
             }
-            if(sum!=0)
-                for (int k=0; k<q; k++){
+            if(sum != 0)
+                for (int k = 0; k < q; k++){
                     eta_NodeToFac[it_i->n][index_a][k]/=sum;
                 }
             else
                 errorflag=0;
-            
         }
     }
+    
     return errorflag;
+
 };
 
-void Messages::nodeMarginals(int verbose=0){
+
+
+bool Messages::nodeMarginals(bool verbose=0){
+    
+    bool f = 1;
+    
     //for each node i
     for(vector<Node>::iterator it_i=G.v.begin(); it_i !=G.v.end(); ++it_i){
         vector <double> marg(q,1.);
@@ -776,6 +895,7 @@ void Messages::nodeMarginals(int verbose=0){
         }
         
         if (!sum){
+            f = 0;
             if(verbose)
                 cout << "node " << it_i->n << " receives conflicting messages, see below: " << endl;
         }
@@ -787,74 +907,60 @@ void Messages::nodeMarginals(int verbose=0){
         }
         
     }
+    
+    return f;
 
 };
 
-void Messages::setHardBias(vector<int>& v_bias, vector<int>& v_q){
-    
-    //v_bias contains the indices of nodes that have to be biased
-    //v_q contains the color towards which they have to be biased
-    
-    int size=v_bias.size();
-    if (size != v_q.size()){
-        cout << "error: v_q and v_bias have to have the same size!" << endl;
-        return;
-    }
-    else{
-        for (int i=0; i<size; i++){
-            int n=v_bias[i];
-            vector <double> b(q,0);
-            //we set the bias towards the index color specified in v_q[i]
-            b[v_q[i]]=1;
-            bias[n]=b;
-        }
-    }
-    
-};
+
 
 //the three following methods of the class Messages print the state of the BP algorithm
+
 void Messages::etaState(){
 
-  cout << endl;
-  cout << "---*---*---*---printing messages from nodes to factors---*---*---*---" << endl;
+    cout << endl;
+    cout << "---*---*---*---printing messages from nodes to factors---*---*---*---" << endl;
 
-  for (vector<Node>::iterator it_i = G.v.begin(); it_i != G.v.end(); ++it_i){
-    for (vector<int>::iterator it_a = G.v[it_i->n].v_fac.begin(); it_a != G.v[it_i->n].v_fac.end(); ++it_a){
-      cout << "message from node " << it_i->n << " to factor " << *it_a << endl;
-      int index_a = distance (G.v[it_i->n].v_fac.begin(), it_a);
-      cout << eta_NodeToFac[it_i->n][index_a][0] << " " << eta_NodeToFac[it_i->n][index_a][1] << endl;
+    for (vector<Node>::iterator it_i = G.v.begin(); it_i != G.v.end(); ++it_i){
+        for (vector<int>::iterator it_a = G.v[it_i->n].v_fac.begin(); it_a != G.v[it_i->n].v_fac.end(); ++it_a){
+            cout << "message from node " << it_i->n << " to factor " << *it_a << endl;
+            int index_a = distance (G.v[it_i->n].v_fac.begin(), it_a);
+            cout << eta_NodeToFac[it_i->n][index_a][0] << " " << eta_NodeToFac[it_i->n][index_a][1] << endl;
+        }
     }
-  }
 
 };
+
+
 
 void Messages::nuState(){
 
-  cout << endl;
-  cout << "---*---*---*---printing messages from factors to nodes---*---*---*---" << endl;
+    cout << endl;
+    cout << "---*---*---*---printing messages from factors to nodes---*---*---*---" << endl;
 
-  for (vector<Factor*>::iterator it_b = G.F.begin() ; it_b != G.F.end(); ++it_b){
-    for (vector<int>::iterator it_i = G.F[(*it_b)->f]->v_node.begin() ; it_i != G.F[(*it_b)->f]->v_node.end(); ++it_i){
-      cout << "message from factor " << (*it_b)->f << " to node " << *it_i << endl;
-      int index_i = distance (G.F[(*it_b)->f]->v_node.begin(), it_i);
-      cout << nu_FacToNode[(*it_b)->f][index_i][0] << " " << nu_FacToNode[(*it_b)->f][index_i][1] << endl;
+    for (vector<Factor*>::iterator it_b = G.F.begin() ; it_b != G.F.end(); ++it_b){
+        for (vector<int>::iterator it_i = G.F[(*it_b)->f]->v_node.begin() ; it_i != G.F[(*it_b)->f]->v_node.end(); ++it_i){
+            cout << "message from factor " << (*it_b)->f << " to node " << *it_i << endl;
+            int index_i = distance (G.F[(*it_b)->f]->v_node.begin(), it_i);
+            cout << nu_FacToNode[(*it_b)->f][index_i][0] << " " << nu_FacToNode[(*it_b)->f][index_i][1] << endl;
+        }
     }
-  }
 
 };
+
+
 
 void Messages::marginalState(){
 
-  cout << endl;
-  cout << "---*---*---*---printing marginals---*---*---*---" << endl;
+    cout << endl;
+    cout << "---*---*---*---printing marginals---*---*---*---" << endl;
 
-  for (vector<Node>::iterator it_i = G.v.begin(); it_i != G.v.end(); ++it_i){
-    cout << "marginal of node " << it_i->n << endl;
-    cout << marginal[it_i->n][0] << " " << marginal[it_i->n][1] << endl;
-  }
+    for (vector<Node>::iterator it_i = G.v.begin(); it_i != G.v.end(); ++it_i){
+        cout << "marginal of node " << it_i->n << endl;
+        cout << marginal[it_i->n][0] << " " << marginal[it_i->n][1] << endl;
+    }
 
 };
-
 
 
 
@@ -863,7 +969,10 @@ void Messages::marginalState(){
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------//
 
 
-BP::BP(int p_q, Graph& p_G) : q (p_q), G (p_G), mess (q,G) { N=G.N; };
+
+BP::BP(int p_q, Graph& p_G, bool p_verbose) : q (p_q), G (p_G), mess (q,G), verbose(p_verbose) { N=G.N; };
+
+
 
 void BP::initDecimation(vector<int>& v_bias, vector<int>& v_q){
     
@@ -896,26 +1005,34 @@ void BP::initDecimation(vector<int>& v_bias, vector<int>& v_q){
             }
         }
 
-        mess.setHardBias(v_bias, v_q);
-
+        setHardBias(v_bias, v_q);
+        
     }
 
 };
 
-bool BP::BPsweep(int verbose){
+
+
+bool BP::BPsweep(){
 
     mess.nuUpdate();
-    mess.etaUpdate();
-
-    bool flag = mess.etaNormalize();
     
-    mess.nodeMarginals(verbose);
+    //this is not need
+    //mess.nuNormalize();
+    
+    mess.etaUpdate();
+    
+    mess.etaNormalize();
+    
+    bool flag = mess.nodeMarginals(verbose);
 
     if(verbose)
         BPprint();
     
     return flag;
 };
+
+
 
 void BP::BPprint(){
 
@@ -925,7 +1042,9 @@ void BP::BPprint(){
 
 };
 
-bool BP::BPiteration(double eps, int T, int verbose=0){
+
+
+bool BP::BPiteration(double eps, int T){
     
     int    t = 0;
     int    f = 1;
@@ -933,7 +1052,7 @@ bool BP::BPiteration(double eps, int T, int verbose=0){
     
     
     while (tmp_eps > eps && t < T){
-        BPsweep(verbose);
+        BPsweep();
         
         if (t == 2) {
             f = findFrustratedSpins();
@@ -954,9 +1073,11 @@ bool BP::BPiteration(double eps, int T, int verbose=0){
     
     return f;
     
-}
+};
 
-bool BP::warningDecimation(int verbose=0){
+
+
+bool BP::warningDecimation(){
     
     //Pictorially this is how this method works:
     
@@ -983,13 +1104,16 @@ bool BP::warningDecimation(int verbose=0){
     bool f1=1;
     bool f2=1;
     
-    while (f1==1 && (g+g_past>0)){
+    while (f1 == 1 && ( g+g_past >0 )){
     
-        f1 = BPsweep(verbose);
+        f1 = BPsweep();
         
         f2 = findFrustratedSpins();
         
         //f1 and f2 have to be equal
+        if (f1 != f2)
+            cout << " f's : " << f1 << " " << f2 << endl;
+        
         assert(f1==f2);
 
         if (f1 == 0){
@@ -1000,7 +1124,7 @@ bool BP::warningDecimation(int verbose=0){
 
         
         g_past = g;
-        g=fixSpins(verbose);
+        g=fixSpinsByImplications();
 
         t++;
     
@@ -1008,9 +1132,11 @@ bool BP::warningDecimation(int verbose=0){
     
     return f1;
     
-}
+};
 
-void BP::randomDecimation(int verbose=0){
+
+
+void BP::randomDecimation(){
     
     int  t = 0;
     bool f = 1;
@@ -1028,14 +1154,17 @@ void BP::randomDecimation(int verbose=0){
             cout << "---------------------------------------------------------------------------------------------------------call warningDecimation" << endl;
         }
         
-        f = warningDecimation(verbose);
+        f = warningDecimation();
         
         if(verbose)
             cout << "---------------------------------------------------------------------------------------------------------warning propagated; f=" << f << endl;
         
         //if no contraddiction are found and no spins gets fixed, we randomly pick one spin and we fix it
         if (f == 1){
-            fixRandomSpin(verbose);
+            fixRandomSpin();
+        }
+        else{
+            break;
         }
         
         t++;
@@ -1054,7 +1183,9 @@ void BP::randomDecimation(int verbose=0){
 
 };
 
-void BP::BPguidedDecimation(int TT, int verbose=0){
+
+
+void BP::BPguidedDecimation(int TT){
     
     initPreviousMarginals();
     
@@ -1064,7 +1195,6 @@ void BP::BPguidedDecimation(int TT, int verbose=0){
     int    t=0;
     
     while (t < TT && notFixedSpins.size()>0){
-
     
         if(verbose){
             cout << "--------------------------------------time: " << t << "------------------------------------ " << endl;
@@ -1078,7 +1208,7 @@ void BP::BPguidedDecimation(int TT, int verbose=0){
         }
         
         
-        f = BPiteration(eps, T, verbose);
+        f = BPiteration(eps, T);
         
         if (f == 0)
             break;
@@ -1089,7 +1219,7 @@ void BP::BPguidedDecimation(int TT, int verbose=0){
         findMostBiased(v_bias, v_q);
         
         if(v_bias.size() != 0)
-            mess.setHardBias(v_bias,v_q);
+            setHardBias(v_bias,v_q);
     
         if (verbose){
             cout << endl;
@@ -1104,7 +1234,7 @@ void BP::BPguidedDecimation(int TT, int verbose=0){
         if(verbose)
             cout << "--------------------------------------------------------------------------------------------------------------------------- call warningDecimation" << endl;
     
-        f = warningDecimation(verbose);
+        f = warningDecimation();
         
         if(verbose){
             cout << "--------------------------------------------------------------------------------------------------------------------------- warning propagated" << endl;
@@ -1134,6 +1264,32 @@ void BP::BPguidedDecimation(int TT, int verbose=0){
 
 };
 
+
+
+void BP::setHardBias(vector<int>& v_bias, vector<int>& v_q){
+    
+    //v_bias contains the indices of nodes that have to be biased
+    //v_q contains the color towards which they have to be biased
+    
+    int size=v_bias.size();
+    if (size != v_q.size()){
+        cout << "error: v_q and v_bias have to have the same size!" << endl;
+        return;
+    }
+    else{
+        for (int i=0; i<size; i++){
+            int n=v_bias[i];
+            vector <double> b(q,0);
+            //we set the bias towards the index color specified in v_q[i]
+            b[v_q[i]]=1;
+            mess.bias[n]=b;
+        }
+    }
+    
+};
+
+
+
 void BP::initPreviousMarginals(){
     
     prev_marginal.resize(N);
@@ -1146,6 +1302,8 @@ void BP::initPreviousMarginals(){
     
 };
 
+
+
 void BP::storePreviousMarginals(){
     
     for(int i = 0; i < N; i++){
@@ -1154,6 +1312,8 @@ void BP::storePreviousMarginals(){
     }
     
 };
+
+
 
 double BP::compareMarginals(){
     
@@ -1169,7 +1329,9 @@ double BP::compareMarginals(){
     return max;
     
 };
-    
+
+
+
 void BP::findMostBiased(vector<int> & v_bias, vector<int>& v_q){
     
     int    i_max = notFixedSpins[0];
@@ -1194,7 +1356,9 @@ void BP::findMostBiased(vector<int> & v_bias, vector<int>& v_q){
     
 };
 
-void BP::fixRandomSpin(int verbose){
+
+
+void BP::fixRandomSpin(){
     
     vector<int> v_bias;
     vector<int> v_q;
@@ -1216,7 +1380,7 @@ void BP::fixRandomSpin(int verbose){
     notFixedSpins.erase(remove(notFixedSpins.begin(), notFixedSpins.end(), n), notFixedSpins.end());
     
     if(v_bias.size() != 0)
-        mess.setHardBias(v_bias,v_q);
+        setHardBias(v_bias,v_q);
     
     if (verbose){
         cout << "*************** printing the nodes that gets randomly frozen: " << endl;
@@ -1225,6 +1389,7 @@ void BP::fixRandomSpin(int verbose){
     }
     
 };
+
 
 
 bool BP::findFrustratedSpins(){
@@ -1266,9 +1431,11 @@ bool BP::findFrustratedSpins(){
     
 };
 
-int BP::fixSpins(int verbose){
 
-    //this is function needs to be generalized to deal with a general q
+
+int BP::fixSpinsByImplications(){
+
+    //this function needs to be generalized to deal with a general q
     
     //v_bias contains the indices of nodes that have to be biased
     //v_q contains the color towards which they have to be biased
@@ -1317,7 +1484,7 @@ int BP::fixSpins(int verbose){
     }
     
     if(v_bias.size() != 0)
-        mess.setHardBias(v_bias,v_q);
+        setHardBias(v_bias,v_q);
     
 
     if (verbose){
@@ -1334,9 +1501,11 @@ int BP::fixSpins(int verbose){
 };
 
 
+
 void vec_print(vector<int>& vec){
     for (int i=0; i<vec.size(); i++)
         cout << vec[i] << ' ';
     cout << endl;
 }
+
 
